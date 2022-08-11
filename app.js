@@ -1,5 +1,6 @@
 const { Client, MessageMedia, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
+const {google} = require("googleapis");
 const { body, validationResult } = require('express-validator');
 const socketIO = require('socket.io');
 const qrcode = require('qrcode');
@@ -15,7 +16,6 @@ const port = process.env.PORT || 8000;
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
-
 app.use(express.json());
 app.use(express.urlencoded({
   extended: true
@@ -56,66 +56,36 @@ const client = new Client({
   authStrategy: new LocalAuth()
 });
 
-client.on('message', msg => {
-  if (msg.body == '!ping') {
-    msg.reply('pong');
-  } else if (msg.body == 'good morning') {
-    msg.reply('selamat pagi');
-  } else if (msg.body == '!groups') {
-    client.getChats().then(chats => {
-      const groups = chats.filter(chat => chat.isGroup);
+client.on('message', async msg => {
+  const chatId = '120363026667889004@g.us';
+  const msg_ar = (msg.body).split(' ');
+  if(String(msg_ar[0]).toLowerCase() == 'task' && Number(msg_ar[1]) > 1 && msg.from == chatId){
 
-      if (groups.length == 0) {
-        msg.reply('You have no group yet.');
-      } else {
-        let replyMsg = '*YOUR GROUPS*\n\n';
-        groups.forEach((group, i) => {
-          replyMsg += `ID: ${group.id._serialized}\nName: ${group.name}\n\n`;
-        });
-        replyMsg += '_You can use the group id to send a message to the group._'
-        msg.reply(replyMsg);
-      }
+    const auth = new google.auth.GoogleAuth({
+      keyFile: "credentials.json",
+      scopes: "https://www.googleapis.com/auth/spreadsheets",
     });
+    
+    // Create client instance for auth
+    const client2 = await auth.getClient();
+    
+    // Instance of Google Sheets API
+    const googleSheets = google.sheets({ version: "v4", auth: client2 });
+    
+    const spreadsheetId = "1lr5K9bADBOYIulyhgyFhhtHE7UCcenVFoPmHv64P7Mk";
+    
+    const getRows = await googleSheets.spreadsheets.values.get({
+      auth,
+      spreadsheetId,
+      range: "PROGRAM!A" + Number(msg_ar[1]) + ':K' + Number(msg_ar[1]),
+    });
+
+    const message = `*𝗕𝗢𝗧 𝗔𝗟𝗘𝗥𝗧* - _FIRST ENTRY_\n*Who :* ${getRows.data.values[0][0]}\n*Task :* ${Number(msg_ar[1])}\n*Page :* ${getRows.data.values[0][2]}\n*Details :* ${getRows.data.values[0][3]}\n*Status Developer :* ${getRows.data.values[0][7]}\n*Status QA Tester :* ${getRows.data.values[0][8]}\n*Comments :* ${getRows.data.values[0][9]}`;
+    
+    if(getRows.data.values[0][0] !== ''){
+      client.sendMessage(chatId, message);
+    }
   }
-
-  // NOTE!
-  // UNCOMMENT THE SCRIPT BELOW IF YOU WANT TO SAVE THE MESSAGE MEDIA FILES
-  // Downloading media
-  // if (msg.hasMedia) {
-  //   msg.downloadMedia().then(media => {
-  //     // To better understanding
-  //     // Please look at the console what data we get
-  //     console.log(media);
-
-  //     if (media) {
-  //       // The folder to store: change as you want!
-  //       // Create if not exists
-  //       const mediaPath = './downloaded-media/';
-
-  //       if (!fs.existsSync(mediaPath)) {
-  //         fs.mkdirSync(mediaPath);
-  //       }
-
-  //       // Get the file extension by mime-type
-  //       const extension = mime.extension(media.mimetype);
-        
-  //       // Filename: change as you want! 
-  //       // I will use the time for this example
-  //       // Why not use media.filename? Because the value is not certain exists
-  //       const filename = new Date().getTime();
-
-  //       const fullFilename = mediaPath + filename + '.' + extension;
-
-  //       // Save to file
-  //       try {
-  //         fs.writeFileSync(fullFilename, media.data, { encoding: 'base64' }); 
-  //         console.log('File downloaded successfully!', fullFilename);
-  //       } catch (err) {
-  //         console.log('Failed to save the file:', err);
-  //       }
-  //     }
-  //   });
-  // }
 });
 
 client.initialize();
@@ -153,7 +123,6 @@ io.on('connection', function(socket) {
     client.initialize();
   });
 });
-
 
 const checkRegisteredNumber = async function(number) {
   const isRegistered = await client.isRegisteredUser(number);
